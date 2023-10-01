@@ -3,26 +3,29 @@ from unittest import TestCase, mock
 import logging
 import sys
 sys.path.append("src")
-from gatecontrol import Stream, set_logging_level, main  # noqa:
+from gatecontrol import Stream, setup_logging, main  # noqa:
 from eldesalarms.api import User  # noqa:
 
 
 class TestSetLoggingLevel(TestCase):
     @mock.patch('logging.basicConfig')
     def test_set_logging_level(self, mock_basic_config):
-        set_logging_level(0)
+        setup_logging(0)
         mock_basic_config.assert_called_once_with(
-            format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.WARNING)
+            level=logging.WARNING,
+            handlers=mock.ANY)
         mock_basic_config.reset_mock()
 
-        set_logging_level(1)
+        setup_logging(1)
         mock_basic_config.assert_called_once_with(
-            format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.INFO)
+            level=logging.INFO,
+            handlers=mock.ANY)
         mock_basic_config.reset_mock()
 
-        set_logging_level(2)
+        setup_logging(2)
         mock_basic_config.assert_called_once_with(
-            format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.DEBUG)
+            level=logging.DEBUG,
+            handlers=mock.ANY)
 
 
 class TestStream(TestCase):

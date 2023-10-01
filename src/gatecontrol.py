@@ -1,4 +1,5 @@
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from eldesalarms.session import UserSession
 from eldesalarms.api import DeviceApi, User
 import logging
@@ -9,16 +10,27 @@ import csv
 from dataclasses import asdict
 
 
-def set_logging_level(verbosity):
-    if verbosity == 0:
-        logging.basicConfig(format='%(asctime)s %(message)s',
-                            datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.WARNING)
-    elif verbosity == 1:
-        logging.basicConfig(format='%(asctime)s %(message)s',
-                            datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.INFO)
-    elif verbosity >= 2:
-        logging.basicConfig(format='%(asctime)s %(message)s',
-                            datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.DEBUG)
+def setup_logging(verbosity):
+    log_format = '%(asctime)s - %(levelname)s - %(message)s'
+    log_datefmt = '%m/%d/%Y %I:%M:%S %p'
+
+    # Set up console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter(
+        fmt=log_format, datefmt=log_datefmt))
+
+    # Set up rotating file handler
+    file_handler = RotatingFileHandler(
+        'gatecontrol.log', maxBytes=10000, backupCount=3)
+    file_handler.setFormatter(logging.Formatter(
+        fmt=log_format, datefmt=log_datefmt))
+
+    # Set log level based on verbosity
+    log_level = logging.WARNING if verbosity == 0 else logging.INFO if verbosity == 1 else logging.DEBUG
+
+    # Configure root logger
+    logging.basicConfig(level=log_level, handlers=[
+                        console_handler, file_handler])
 
 
 class UploadAction(argparse.Action):
@@ -48,7 +60,8 @@ class Stream():
             try:
                 self.file = open(self.file_name, mode=self.mode)
             except (IOError, PermissionError) as e:
-                logging.error(f"Error opening file {self.file_name}: {e}")
+                logging.error(
+                    f"Error opening file {self.file_name} for mode {self.mode}: {e}")
                 return None
         elif self.mode == 'w' and not os.path.exists(self.file_name):
             try:
@@ -99,7 +112,7 @@ def main():
     config = vars(args)
     print(config)
 
-    set_logging_level(args.verbose)
+    setup_logging(args.verbose)
 
     if args.logs:
         date_format = "%Y%m%d"
@@ -125,7 +138,7 @@ def main():
         api = DeviceApi(session, args.device)
     else:
         logging.error(
-            "Unable to login to Eldes Alarms. Please check your credentials")
+            f'Unable to login to Eldes Alarms with username {args.username}. Please check your credentials')
         exit(1)
 
     if args.download:

@@ -78,7 +78,7 @@ class UserSession(requests.Session):
                 logging.error(
                     f'Error occurred while logging in. Status code {logged_in_page.status_code}')
                 raise ValueError(
-                    'Unable to login to Eldes Alarms. Please check your credentials')
+                    f'Unable to login to Eldes Alarms with username {self.username}. Please check your credentials')
 
         except requests.exceptions.RequestException as e:
             logging.error(f'Error occurred while logging in: {e}')
