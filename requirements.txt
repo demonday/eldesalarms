@@ -1,0 +1,8 @@
+beautifulsoup4
+requests
+html5lib
+pathlib
+pywhatkit
+selenium
+lxml
+progress
