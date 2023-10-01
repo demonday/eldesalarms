@@ -1,3 +1,4 @@
+from http import HTTPStatus
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -71,7 +72,7 @@ class UserSession(requests.Session):
                 f'Session Id (Post-Login): {self.cookies.get("PHPSESSID")}')
 
             # If successfully logged-in, we get a 200 response code, and a new session id
-            if logged_in_page.status_code == 200 and self.cookies.get("PHPSESSID") != pre_login_session_id:
+            if logged_in_page.status_code == HTTPStatus.OK and self.cookies.get("PHPSESSID") != pre_login_session_id:
                 self.logged_in = True
             else:
                 logging.error(

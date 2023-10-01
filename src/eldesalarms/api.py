@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from http import HTTPStatus
 import time
 from bs4 import BeautifulSoup
 from lxml import etree
@@ -43,10 +44,18 @@ class LogEntry:
 LOG_DATE_FORMAT = '%Y.%m.%d %H:%M:%S'
 # 2023.09.23 20:08:56 Opened by user:18TVName(callR:1):0871234567
 
+# Length of time to wait for the synchronization to complete
+SYNC_TIMEOUT_SECONDS = 180
+# Length of time to wait between checking the synchronization progress
+SYNC_SLEEP_DURATION_SECONDS = 10
+
+# Date format used by the API for log requests
+LOGAPI_DATE_FMT = '%Y-%m-%d'
+
 
 class DeviceApi:
 
-    class _user_iterator:
+    class UserIterator:
         def __init__(self, api):
             self.api = api
             self.cache = []
@@ -74,7 +83,7 @@ class DeviceApi:
             tbody = table.find('tbody')
             for i, row in enumerate(tbody.find_all('tr')):
                 data = row.find_all('td')
-                user = DeviceApi._user_iterator.row_to_user(data)
+                user = DeviceApi.UserIterator.row_to_user(data)
                 self.cache.append(user)
             self.page_no = 2
 
@@ -99,7 +108,7 @@ class DeviceApi:
                     tbody = table.find('tbody')
                     for i, row in enumerate(tbody.find_all('tr')):
                         data = row.find_all('td')
-                        user = DeviceApi._user_iterator.row_to_user(data)
+                        user = DeviceApi.UserIterator.row_to_user(data)
                         self.cache.append(user)
                     self.page_no += 1
                     # Assumes there is at least one user on the last page
@@ -115,14 +124,15 @@ class DeviceApi:
 
     @property
     def users(self):
-        return DeviceApi._user_iterator(self)
+        return DeviceApi.UserIterator(self)
 
     @staticmethod
     def parse_log_line(line: str) -> LogEntry:
         datestr = line[0:19]
         when = datetime.strptime(datestr, LOG_DATE_FORMAT)
 
-        # Extract who
+        # 2023.09.23 20:08:56 Opened by user:18TVperson1(callR:1):0871234567
+        # Extract who, which is the text between user: and (callR
         who_pattern = r'user:(.*?)\(callR'
         who_match = re.search(who_pattern, line)
         if who_match:
@@ -130,12 +140,13 @@ class DeviceApi:
         else:
             who = None
 
-        # Using regex to find the number at the beginning of the string
+        # Extract apt_no which is the number prefixing the who
+        # There are other users like the cleaners etc that don't have an apt_no
         if who:
             apt_match = re.match(r'^(\d+)', who)
             apt_no = int(apt_match.group(1)) if apt_match else None
 
-        # Extract phone
+        # Extract phone, which is the text between (callR:1): and the end of the line
         phone_pattern = r"\(callR:1\):(\d+)"
         phone_match = re.search(phone_pattern, line)
         if phone_match:
@@ -166,8 +177,10 @@ class DeviceApi:
 
     # https://gates.eldesalarms.com/en/gatesconfig/settings/users/ajax/1/device_id/50550/number/385.html
     def add_user(self, user: User):
-        t = datetime.now()
-        cache_buster = str(int(time.mktime(t.timetuple())))
+
+        # Use timestamp a a cachebuster
+        now = datetime.now()
+        cache_buster = str(int(time.mktime(now.timetuple())))
 
         request_url = ADDUSER_PAGE_URL.format(self.device_id, cache_buster)
         headers = BASE_HEADERS
@@ -212,7 +225,7 @@ class DeviceApi:
                  'Host': 'gates.eldesalarms.com',
                  'Origin': 'https://gates.eldesalarms.com'}))
 
-            if response.status_code != 200:
+            if response.status_code != HTTPStatus.OK:
                 raise ValueError(
                     f'Error occurred while adding user {user.name}. Status code {response.status_code}')
 
@@ -223,8 +236,6 @@ class DeviceApi:
 
     def get_logs(self, start: date, end: date) -> [LogEntry]:
 
-        API_DATE_FMT = '%Y-%m-%d'
-
         logging.info(f'Getting gate logs from {start} to {end} inclusive.')
 
         t = datetime.now()
@@ -232,7 +243,7 @@ class DeviceApi:
         dl_button = '/html/body/div/div/a[2]'
 
         request_url = LOG_FILE_URL.format(cache_buster, start.strftime(
-            API_DATE_FMT), end.strftime(API_DATE_FMT))
+            LOGAPI_DATE_FMT), end.strftime(LOGAPI_DATE_FMT))
 
         headers = BASE_HEADERS
         headers['Path'] = request_url
@@ -268,7 +279,7 @@ class DeviceApi:
         with ThreadPoolExecutor() as executor:
             future = executor.submit(self.sync_synchronize)
             try:
-                result = future.result(timeout)
+                result = future.result(timeout=SYNC_TIMEOUT_SECONDS)
             except TimeoutError:
                 raise TimeoutError(
                     'Unable to complete synchronization within {} seconds. It will continue in the background'.format(timeout))
@@ -282,7 +293,7 @@ class DeviceApi:
                      'Host': 'gates.eldesalarms.com',
                      'Origin': 'https://gates.eldesalarms.com'}))
 
-            if sync_response.status_code not in [200, 302]:
+            if sync_response.status_code not in [HTTPStatus.OK, HTTPStatus.FOUND]:
                 raise ValueError(
                     'Error occurred while synchronizing. Status code {}'.format(sync_response.status_code))
         except requests.exceptions.RequestException as e:
@@ -293,7 +304,7 @@ class DeviceApi:
         bar = Bar('Synchronizing...', max=100)
         bar.index = 0
         bar.update()
-        time.sleep(5)
+        time.sleep(SYNC_SLEEP_DURATION_SECONDS)
         progress_response = None
         while not synced:
             try:
@@ -319,10 +330,10 @@ class DeviceApi:
                     bar.finish()
                     synced = True
                 else:
-                    time.sleep(5)
+                    time.sleep(SYNC_SLEEP_DURATION_SECONDS)
                     bar.update()
             else:
-                time.sleep(5)
+                time.sleep(SYNC_SLEEP_DURATION_SECONDS)
                 bar.update()
 
         return True
