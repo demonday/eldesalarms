@@ -38,6 +38,7 @@ class UserSession(requests.Session):
         self.logged_in = False
         self.username = username
         self.password = password
+        self.token = None
 
     def login(self) -> bool:
 
@@ -47,7 +48,7 @@ class UserSession(requests.Session):
         ctx.verify_mode = ssl.CERT_NONE
 
         try:
-            super().get(LOGIN_URL, headers=BASE_HEADERS)
+            r = super().get(LOGIN_URL, headers=BASE_HEADERS)
         except requests.exceptions.RequestException as e:
             logging.error(f'Error occurred while requesting login page: {e}')
             raise ValueError('Could not connect to Eldes Alarms')
@@ -57,7 +58,6 @@ class UserSession(requests.Session):
 
         # Extracting the last parameter of the token and remove the double quotes,
         # to yield the YII_CSRF_TOKEN parameter required to login properly
-
         match = re.search(
             r'"([^"]+)"', urllib.parse.unquote(self.cookies.get("YII_CSRF_TOKEN")))
         self.token = match.group(1) if match else None
@@ -72,7 +72,7 @@ class UserSession(requests.Session):
                 f'Session Id (Post-Login): {self.cookies.get("PHPSESSID")}')
 
             # If successfully logged-in, we get a 200 response code, and a new session id
-            if logged_in_page.status_code == HTTPStatus.OK and self.cookies.get("PHPSESSID") != pre_login_session_id:
+            if logged_in_page.status_code == HTTPStatus.FOUND and self.cookies.get("PHPSESSID") != pre_login_session_id:
                 self.logged_in = True
             else:
                 logging.error(

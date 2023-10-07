@@ -15,11 +15,12 @@ from concurrent.futures import ThreadPoolExecutor
 BASE_URL = 'https://gates.eldesalarms.com'
 INITIAL_URL = 'https://gates.eldesalarms.com/gatesconfig/settings/configuration/device_id/{}#tabs_tab_users'
 USER_DATA_URL = 'https://gates.eldesalarms.com/en/gatesconfig/settings/configuration/ajax/gatesconfig-device-usersdatabase-grid/device_id/{}/GatesconfigDeviceUsersdatabase_page/{}.html?ajax=gatesconfig-device-usersdatabase-grid'  # noqa: E501
-LOG_FILE_URL = 'https://gates.eldesalarms.com/en/gatesconfig/settings/getlog/ajax/1/device_id/50550.html?_={}&logstart={}&logend={}'
+LOG_FILE_URL = 'https://gates.eldesalarms.com/en/gatesconfig/settings/getlog/ajax/1/device_id/{}.html?_={}&logstart={}&logend={}'
 ADDUSER_PAGE_URL = 'https://gates.eldesalarms.com/en/gatesconfig/settings/users/ajax/1/device_id/{}/tab/1.html?_={}'
 ADDUSER_ACTION_ELEMENT = '/html/body/form'
 ADDUSER_CONTROLLER_ELEMENT = '//*[@id="GatesconfigDeviceUsersdatabase_output"]/option'
-LAST_PAGE_ELEMENT = '/html/body/div[1]/section/div[1]/div/div/div[4]/div/div[2]/div[5]/div/div[2]/ul/li[12]/a'
+LAST_PAGE_ELEMENT = '/html/body/div[1]/section/div[1]/div/div/div[4]/div/div[2]/div[5]/div/div[2]/ul/li[12]/a'\
+
 SYNC_URL = 'https://gates.eldesalarms.com/en/gatesconfig/settings/start/devId/{}.html'  # device_id
 SYNC_PROGRESS_URL = 'https://gates.eldesalarms.com/gatesconfig/settings/check?devId={}'  # device_id
 
@@ -86,6 +87,7 @@ class DeviceApi:
                 user = DeviceApi.UserIterator.row_to_user(data)
                 self.cache.append(user)
             self.page_no = 2
+            self.cache.reverse()
 
         @staticmethod
         def row_to_user(data):
@@ -111,6 +113,7 @@ class DeviceApi:
                         user = DeviceApi.UserIterator.row_to_user(data)
                         self.cache.append(user)
                     self.page_no += 1
+                    self.cache.reverse()
                     # Assumes there is at least one user on the last page
                     return self.cache.pop()
                 else:
@@ -242,7 +245,7 @@ class DeviceApi:
         cache_buster = str(int(time.mktime(t.timetuple())))
         dl_button = '/html/body/div/div/a[2]'
 
-        request_url = LOG_FILE_URL.format(cache_buster, start.strftime(
+        request_url = LOG_FILE_URL.format(self.device_id, cache_buster, start.strftime(
             LOGAPI_DATE_FMT), end.strftime(LOGAPI_DATE_FMT))
 
         headers = BASE_HEADERS
